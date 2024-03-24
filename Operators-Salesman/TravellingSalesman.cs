@@ -4,15 +4,15 @@ namespace Operators
 {
     public class TravellingSalesman
     {
-        public decimal[][] Paths { get; private set; }
-        public TravellingSalesman(decimal[][] paths)
+        public Matrix Distance{ get; private set; }
+        public TravellingSalesman(List<List<decimal>> paths)
         {
-            int width = paths.Length;
+            int width = paths.Count;
             foreach (var path in paths)
-                if (path.Length != width)
+                if (path.Count != width)
                     throw new Exception("Matrix is not square");
 
-            Paths = paths;
+            Distance = new Matrix(paths);
         }
     }
 }
