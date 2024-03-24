@@ -2,23 +2,17 @@
 {
     public class Matrix
     {
-        private List<MatrixUnit> Columns { get; set; }
-        private List<MatrixUnit> Rows { get; set; }
+        private List<Column> Columns { get; set; }
+        private List<Row> Rows { get; set; }
 
         public Matrix(List<List<decimal>> distance)
         {
-            Rows = new List<MatrixUnit>();
-            Columns = new List<MatrixUnit>();
-            var isFirst = true;
+            Rows = new List<Row>();
+            Columns = new List<Column>();
             for (int i = 0; i < distance.Count; i++)
             {
-                Rows.Add(new MatrixUnit(distance[i], i));
-                for (int j = 0; j < distance.Count; j++)
-                {
-                    if (isFirst) Columns.Add(new MatrixUnit(j));
-                    Columns[j].Add(distance[i][j]);
-                }
-                isFirst = false;
+                Rows.Add(new Row(i, distance));
+                Columns.Add(new Column(i, distance));
             }
         }
 
