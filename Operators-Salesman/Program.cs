@@ -15,6 +15,7 @@
             };
 
             var salesman = new TravellingSalesman(matrix);
+            salesman.FindPath();
         }
     }
 }
