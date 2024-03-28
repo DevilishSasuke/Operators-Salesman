@@ -2,8 +2,10 @@
 {
     public abstract class MatrixUnit
     {
-        public bool IsActive { get; private set; }
         public int Number { get; set; }
+        public int ActualNumber { get; set; }
+        public bool IsActive { get; private set; }
+        public int Blocked { get; set; }
         public List<List<decimal>> Distance;
         public Matrix Owner { get; set; }
 
@@ -11,11 +13,13 @@
         {
             Distance = distance;
             Number = number;
+            ActualNumber = number;
+            Blocked = Number;
             IsActive = true;
             Owner = owner;
         }
 
-        public decimal Min() => Min(Number);
+        public decimal Min() => Min(Blocked);
         public decimal Min(int index)
         {
             if (!IsActive) throw new Exception("Inactive");
@@ -25,7 +29,7 @@
 
             for (int i = 0; i < values.Count; i++)
             {
-                if (i == Number || i == index) continue;
+                if (i == Blocked || i == index) continue;
                 if (values[i] < min) min = values[i];
             }
 
@@ -35,7 +39,7 @@
 
         public static implicit operator List<decimal>(MatrixUnit unit) => unit.Values();
         public static implicit operator bool(MatrixUnit unit) => unit.IsActive;
-        public static implicit operator int(MatrixUnit unit) => unit.Number;
+        public static implicit operator int(MatrixUnit unit) => unit.Blocked;
         public void SetActive() => IsActive = true;
         public void SetInactive() => IsActive = false;
         public void Add(decimal value) { Values().Add(value); }

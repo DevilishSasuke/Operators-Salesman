@@ -1,16 +1,24 @@
-﻿namespace Operators
+﻿using System.Runtime.InteropServices;
+
+namespace Operators
 {
     public class Matrix
     {
         public List<Column> Columns { get; set; }
         public List<Row> Rows { get; set; }
         public List<List<decimal>> Distance { get; private set; }
+        private Dictionary<int, int> edges;
+        private List<Row> RemovedRows = new();
+        private List<Column> RemovedColumns = new();
 
         public Matrix(List<List<decimal>> distance)
         {
             Rows = new List<Row>();
             Columns = new List<Column>();
-            Distance = distance;
+            edges = new();
+            Distance = new();
+            foreach (var row in distance)
+                Distance.Add(new(row));
             for (int i = 0; i < Distance.Count; i++)
             {
                 Rows.Add(new Row(i, Distance, this));
@@ -39,13 +47,14 @@
             if (included <= excluded)
             {
                 bound += included;
+                CreateNewMatrix();
                 return (indexI, indexJ);
             }
             else
             {
                 bound += excluded;
                 RollBack(indexI, indexJ);
-                return (0, 0);
+                throw new Exception("Incorrect result");
             }
         }
 
@@ -75,6 +84,32 @@
 
             return (resI, resJ);
         } 
+
+        public void CreateNewMatrix()
+        {
+            var newDistance = new List<List<decimal>>();
+
+            int columnNum = 0, rowNum = 0;
+            foreach (var column in Columns)
+                if (!column.IsActive) 
+                     columnNum = column.ActualNumber;
+
+            foreach (var row in Rows)
+                if (row.IsActive)
+                    newDistance.Add(row.Values());
+                else rowNum = row.ActualNumber;
+
+            var matrix = new Matrix(newDistance);
+            this.Distance = matrix.Distance;
+            this.Rows = matrix.Rows;
+            this.Columns = matrix.Columns;
+            foreach (var column in Columns)
+                if (column.ActualNumber >= columnNum)
+                    column.ActualNumber++;
+            foreach(var row in Rows)
+                if (row.ActualNumber >= rowNum)
+                    row.ActualNumber++;
+        }
 
         public decimal ExcludeEdge(int indexI, int indexJ)
         {
@@ -193,10 +228,40 @@
             return elements;
         }
 
+        public void SetInfinities(Dictionary<int, int> edges)
+        {
+            List<(int, int)> blocks = new List<(int, int)> ();
+            if (edges.Count < 2) return;
+
+            foreach(var items in edges)
+                foreach(var otherItems in edges)
+                    if (items.Value == otherItems.Key)
+                        blocks.Add((otherItems.Value, items.Key));
+        }
+
+        private void RememberRemovedRow(Row row)
+        {
+            int offset = 0;
+            for (int i = RemovedRows.Count - 1; i >= 0; i--)
+                if (row.Number + offset >= RemovedRows[i].Number)
+                    offset++;
+            row.Number += offset;
+            RemovedRows.Add(row);
+        }
+        private void RememberRemovedColumn(Column column)
+        {
+            int offset = 0;
+            for (int i = RemovedColumns.Count - 1; i >= 0; i--)
+                if (column.Number + offset >= RemovedColumns[i].Number)
+                    offset++;
+            column.Number += offset;
+            RemovedColumns.Add(column);
+        }
+
         private void RollBack(int i, int j)
         {
             SetActiveRow(i);
-            SetActiveRow(j);
+            SetActiveColumn(j);
         }
 
         private void SetActiveRow(int index) => Rows[index].SetActive();
