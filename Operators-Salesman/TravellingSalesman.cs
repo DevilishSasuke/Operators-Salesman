@@ -1,7 +1,4 @@
-﻿using System;
-using System.Reflection.Metadata.Ecma335;
-
-namespace Operators
+﻿namespace Operators
 {
     public class TravellingSalesman
     {
@@ -22,9 +19,16 @@ namespace Operators
         public List<decimal> FindPath()
         {
             List<decimal> path = new(), elements = new();
+            Dictionary<int, int> edges = new();
 
             LowerBound = Distance.LowerBoundValue();
-            Distance.DoSomething();
+            while(Distance.RowsCount() > 2 && Distance.ColumnsCount() > 2)
+            {
+                var bound = LowerBound;
+                var (node1, node2) = Distance.FindNextEdge(ref bound);
+                edges[node1] = node2;
+                LowerBound = bound;
+            }
 
             return path;
         }

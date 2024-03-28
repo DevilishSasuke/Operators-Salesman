@@ -1,8 +1,4 @@
-﻿using System.Data;
-using System.Text.Json.Serialization;
-using System.Xml.Linq;
-
-namespace Operators
+﻿namespace Operators
 {
     public class Matrix
     {
@@ -32,7 +28,7 @@ namespace Operators
             return rowElements.Sum() + columnElements.Sum();
         }
 
-        public void DoSomething()
+        public (int, int) FindNextEdge(ref decimal bound)
         {
             var rowElements = MinRowWithZeroReplacing();
             var columnElements = MinColumnWithZeroReplacing();
@@ -40,6 +36,17 @@ namespace Operators
             var (indexI, indexJ) = MaxIntersection(rowElements, columnElements);
             var excluded = ExcludeEdge(indexI, indexJ);
             var included = IncludeEdge(indexI, indexJ);
+            if (included <= excluded)
+            {
+                bound += included;
+                return (indexI, indexJ);
+            }
+            else
+            {
+                bound += excluded;
+                RollBack(indexI, indexJ);
+                return (0, 0);
+            }
         }
 
         public (int, int) MaxIntersection(List<decimal> rows, List<decimal> columns)
@@ -121,6 +128,7 @@ namespace Operators
             return elements;
         }
 
+        // Поочередное исключение нолей в рядах
         public List<decimal> MinRowWithZeroReplacing()
         {
             var elements = new List<decimal>();
@@ -157,6 +165,7 @@ namespace Operators
             return elements;
         }
 
+        // Поочередное исключение нолей в столбцах
         public List<decimal> MinColumnWithZeroReplacing()
         {
             var elements = new List<decimal>();
@@ -184,9 +193,15 @@ namespace Operators
             return elements;
         }
 
-        public void SetActiveRow(int index) => Rows[index].SetInactive();
+        private void RollBack(int i, int j)
+        {
+            SetActiveRow(i);
+            SetActiveRow(j);
+        }
+
+        private void SetActiveRow(int index) => Rows[index].SetActive();
         public void SetInactiveRow(int index) => Rows[index].SetInactive();
-        public void SetActiveColumn(int index) => Columns[index].SetActive();
+        private void SetActiveColumn(int index) => Columns[index].SetActive();
         public void SetInactiveColumn(int index) => Columns[index].SetInactive();
         public List<decimal> GetColumn(int columnNumber) => Columns[columnNumber];
         public List<decimal> GetRow(int rowNumber) => Rows[rowNumber];
@@ -199,6 +214,24 @@ namespace Operators
                 else return Rows[i][j];
             }
             set => Rows[i][j] = value;
+        }
+
+        public int RowsCount()
+        {
+            int count = 0;
+            foreach (var row in Rows)
+                if (row.IsActive) count++;
+
+            return count;
+        }
+
+        public int ColumnsCount() 
+        {
+            int count = 0;
+            foreach(var column in Columns)
+                if (column.IsActive) count++;
+
+            return count;
         }
     }
 }
