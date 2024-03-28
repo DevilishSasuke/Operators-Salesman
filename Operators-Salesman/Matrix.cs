@@ -1,11 +1,13 @@
-﻿using System.Xml.Linq;
+﻿using System.Data;
+using System.Text.Json.Serialization;
+using System.Xml.Linq;
 
 namespace Operators
 {
     public class Matrix
     {
-        private List<Column> Columns { get; set; }
-        private List<Row> Rows { get; set; }
+        public List<Column> Columns { get; set; }
+        public List<Row> Rows { get; set; }
         public List<List<decimal>> Distance { get; private set; }
 
         public Matrix(List<List<decimal>> distance)
@@ -15,8 +17,8 @@ namespace Operators
             Distance = distance;
             for (int i = 0; i < Distance.Count; i++)
             {
-                Rows.Add(new Row(i, Distance));
-                Columns.Add(new Column(i, Distance));
+                Rows.Add(new Row(i, Distance, this));
+                Columns.Add(new Column(i, Distance, this));
             }
         }
 
@@ -36,7 +38,8 @@ namespace Operators
             var columnElements = MinColumnWithZeroReplacing();
 
             var (indexI, indexJ) = MaxIntersection(rowElements, columnElements);
-            ExcludeEdge(indexI, indexJ);
+            var excluded = ExcludeEdge(indexI, indexJ);
+            var included = IncludeEdge(indexI, indexJ);
         }
 
         public (int, int) MaxIntersection(List<decimal> rows, List<decimal> columns)
@@ -45,8 +48,11 @@ namespace Operators
             int resI = 0, resJ = 0;
 
             for (int i = 0; i < Distance.Count; i++)
+            {
+                if (!Rows[i].IsActive) continue;
                 for (int j = 0; j < Distance[0].Count; j++)
                 {
+                    if (!Columns[j].IsActive) continue;
                     if (Distance[i][j] == 0 && i != j)
                     {
                         value = rows[i] + columns[j];
@@ -58,23 +64,42 @@ namespace Operators
                     }
 
                 }
+            }
 
             return (resI, resJ);
         } 
 
-        public void ExcludeEdge(int i, int j)
+        public decimal ExcludeEdge(int indexI, int indexJ)
         {
+            var rowElements = MinRowElements();
+            rowElements[indexI] = Rows[indexI].Min(indexJ);
+            var columnElements = MinColumnElements();
+            columnElements[indexJ] = Columns[indexJ].Min(indexI);
 
+            return rowElements.Sum() + columnElements.Sum();
+        }
+
+        public decimal IncludeEdge(int i, int j)
+        {
+            SetInactiveRow(i);
+            SetInactiveColumn(j);
+
+            var rowElements = MinRowElements();
+            var columnElements = MinColumnElements();
+
+            return rowElements.Sum() + columnElements.Sum();
         }
 
         public void SubInRows(List<decimal> values)
         {
             for (int i = 0; i < Rows.Count; i++)
-                for(int j = 0; j < Columns.Count; j++)
+            {
+                for (int j = 0; j < Columns.Count; j++)
                 {
                     if (j == Rows[i].Number) continue;
                     Rows[i][j] -= values[i];
                 }
+            }
         }
         
         public void SubInColumns(List<decimal> values)
@@ -91,7 +116,7 @@ namespace Operators
         {
             var elements = new List<decimal>();
             foreach (var row in Rows)
-                elements.Add(row.Min());
+                if (row.IsActive) elements.Add(row.Min());
 
             return elements;
         }
@@ -100,10 +125,13 @@ namespace Operators
         {
             var elements = new List<decimal>();
 
-            foreach(var row in Rows)
+            foreach (var row in Rows)
             {
+                if (!row.IsActive) continue;
                 decimal min = decimal.MaxValue;
-                for (int j = 0; j < row.Values().Count; j++)
+                for (int j = 0; j < row.Values().Count; j++) 
+                {
+                    if (!Columns[j].IsActive) continue;
                     if (row[j] == 0)
                     {
                         if (j == row.Number) continue;
@@ -111,6 +139,7 @@ namespace Operators
                         if (value < min)
                             min = value;
                     }
+                }
                 if (min == decimal.MaxValue)
                     min = row.Min();
                 elements.Add(min);
@@ -123,7 +152,7 @@ namespace Operators
         {
             var elements = new List<decimal>();
             foreach(var column in Columns)
-                elements.Add(column.Min());
+                if (column.IsActive) elements.Add(column.Min());
 
             return elements;
         }
@@ -134,8 +163,11 @@ namespace Operators
 
             foreach (var column in Columns)
             {
+                if (!column.IsActive) continue;
                 decimal min = decimal.MaxValue;
-                for (int j = 0; j < column.Values().Count; j++)
+                for (int j = 0; j < column.Values().Count; j++) 
+                {
+                    if (!Rows[j].IsActive) continue;
                     if (column[j] == 0)
                     {
                         if (j == column.Number) continue;
@@ -143,6 +175,7 @@ namespace Operators
                         if (value < min)
                             min = value;
                     }
+                }
                 if (min == decimal.MaxValue)
                     min = column.Min();
                 elements.Add(min);
@@ -151,8 +184,10 @@ namespace Operators
             return elements;
         }
 
-        public void SetInactiveRow(int index) => Rows[index].IsActive = false;
-        public void SetInactiveColumn(int index) => Columns[index].IsActive = false;
+        public void SetActiveRow(int index) => Rows[index].SetInactive();
+        public void SetInactiveRow(int index) => Rows[index].SetInactive();
+        public void SetActiveColumn(int index) => Columns[index].SetActive();
+        public void SetInactiveColumn(int index) => Columns[index].SetInactive();
         public List<decimal> GetColumn(int columnNumber) => Columns[columnNumber];
         public List<decimal> GetRow(int rowNumber) => Rows[rowNumber];
         public decimal this[int i, int j]

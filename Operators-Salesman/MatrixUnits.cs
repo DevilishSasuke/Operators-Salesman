@@ -1,24 +1,30 @@
-﻿using System.Net;
+﻿using System.Buffers;
+using System.Collections.Immutable;
+using System.Net;
 using System.Text;
 
 namespace Operators
 {
     public abstract class MatrixUnit
     {
-        public bool IsActive { get; set; }
+        public bool IsActive { get; private set; }
         public int Number { get; set; }
         public List<List<decimal>> Distance;
+        public Matrix Owner { get; set; }
 
-        public MatrixUnit(int number, List<List<decimal>> distance)
+        public MatrixUnit(int number, List<List<decimal>> distance, Matrix owner)
         {
             Distance = distance;
             Number = number;
             IsActive = true;
+            Owner = owner;
         }
 
         public decimal Min() => Min(Number);
         public decimal Min(int index)
         {
+            if (!IsActive) throw new Exception("Inactive");
+
             var values = Values();
             decimal min = decimal.MaxValue;
 
@@ -35,13 +41,15 @@ namespace Operators
         public static implicit operator List<decimal>(MatrixUnit unit) => unit.Values();
         public static implicit operator bool(MatrixUnit unit) => unit.IsActive;
         public static implicit operator int(MatrixUnit unit) => unit.Number;
+        public void SetActive() => IsActive = true;
+        public void SetInactive() => IsActive = false;
         public void Add(decimal value) { Values().Add(value); }
         public abstract decimal this[int index] { get; set; }
     }
 
     public class Column : MatrixUnit
     {
-        public Column(int number, List<List<decimal>> distance) : base(number, distance)
+        public Column(int number, List<List<decimal>> distance, Matrix owner) : base(number, distance, owner)
         {
         }
 
@@ -50,11 +58,11 @@ namespace Operators
             var values = new List<decimal>();
             if (IsActive)
             {
-                foreach (var row in Distance)
-                    values.Add(row[Number]);
+                foreach (var row in Owner.Rows)
+                    if (row.IsActive) values.Add(Distance[row.Number][Number]);
                 return values;
             }
-            return null;
+            throw new Exception("Inactive");
         }
 
         public override decimal this[int index]
@@ -66,15 +74,20 @@ namespace Operators
 
     public class Row : MatrixUnit
     {
-        public Row(int number, List<List<decimal>> distance) : base(number, distance)
+        public Row(int number, List<List<decimal>> distance, Matrix owner) : base(number, distance, owner)
         {
         }
 
         public override List<decimal> Values()
         {
+            var values = new List<decimal>();
             if (IsActive)
-                return Distance[Number];
-            return null;
+            {
+                foreach (var column in Owner.Columns)
+                    if (column.IsActive) values.Add(Distance[Number][column.Number]);
+                return values;
+            }
+            throw new Exception("Inactive");
         }
 
         
