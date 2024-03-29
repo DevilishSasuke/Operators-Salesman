@@ -47,6 +47,8 @@ namespace Operators
             if (included <= excluded)
             {
                 bound += included;
+                indexI = Rows[indexI].ActualNumber;
+                indexJ = Columns[indexJ].ActualNumber;
                 CreateNewMatrix();
                 return (indexI, indexJ);
             }
@@ -69,7 +71,7 @@ namespace Operators
                 for (int j = 0; j < Distance[0].Count; j++)
                 {
                     if (!Columns[j].IsActive) continue;
-                    if (Distance[i][j] == 0 && i != j)
+                    if (Distance[i][j] == 0 && j != Rows[i].Blocked && i != Columns[j].Blocked)
                     {
                         value = rows[i] + columns[j];
                         if (value > maxValue)
@@ -88,27 +90,29 @@ namespace Operators
         public void CreateNewMatrix()
         {
             var newDistance = new List<List<decimal>>();
+            List<int> rowActualNumbers = new(), columnActualNumbers = new();
 
-            int columnNum = 0, rowNum = 0;
             foreach (var column in Columns)
-                if (!column.IsActive) 
-                     columnNum = column.ActualNumber;
+                if (column.IsActive)
+                    columnActualNumbers.Add(column.ActualNumber);
 
             foreach (var row in Rows)
                 if (row.IsActive)
+                {
                     newDistance.Add(row.Values());
-                else rowNum = row.ActualNumber;
+                    rowActualNumbers.Add(row.ActualNumber);
+                }
 
             var matrix = new Matrix(newDistance);
             this.Distance = matrix.Distance;
             this.Rows = matrix.Rows;
             this.Columns = matrix.Columns;
-            foreach (var column in Columns)
-                if (column.ActualNumber >= columnNum)
-                    column.ActualNumber++;
-            foreach(var row in Rows)
-                if (row.ActualNumber >= rowNum)
-                    row.ActualNumber++;
+
+            for (int i = 0; i < Distance.Count; i++)
+            {
+                Rows[i].ActualNumber = rowActualNumbers[i];
+                Columns[i].ActualNumber = columnActualNumbers[i];
+            }
         }
 
         public decimal ExcludeEdge(int indexI, int indexJ)
@@ -177,7 +181,7 @@ namespace Operators
                     if (!Columns[j].IsActive) continue;
                     if (row[j] == 0)
                     {
-                        if (j == row.Number) continue;
+                        if (j == row.Blocked) continue;
                         var value = row.Min(j);
                         if (value < min)
                             min = value;
@@ -214,7 +218,7 @@ namespace Operators
                     if (!Rows[j].IsActive) continue;
                     if (column[j] == 0)
                     {
-                        if (j == column.Number) continue;
+                        if (j == column.Blocked) continue;
                         var value = column.Min(j);
                         if (value < min)
                             min = value;
@@ -230,13 +234,66 @@ namespace Operators
 
         public void SetInfinities(Dictionary<int, int> edges)
         {
-            List<(int, int)> blocks = new List<(int, int)> ();
+            List<(int, int)> blocks = new List<(int, int)>();
             if (edges.Count < 2) return;
 
             foreach(var items in edges)
                 foreach(var otherItems in edges)
                     if (items.Value == otherItems.Key)
                         blocks.Add((otherItems.Value, items.Key));
+
+            foreach(var block in blocks)
+            {
+                var rowIndex = block.Item1;
+                var columnIndex = block.Item2;
+                int toSwitch;
+                foreach (var row in Rows)
+                    if (row.ActualNumber == rowIndex)
+                    {
+                        toSwitch = ActualToLocalColumn(columnIndex);
+                        SwitchRowBlocked(toSwitch, row.Blocked);
+                        row.Blocked = toSwitch;
+                    }
+                foreach (var column in Columns)
+                    if (column.ActualNumber == columnIndex)
+                    {
+                        toSwitch = ActualToLocalRow(rowIndex);
+                        SwitchColumnBlocked(toSwitch, column.Blocked);
+                        column.Blocked = toSwitch;
+                    }
+            }
+        }
+
+        public void SwitchRowBlocked(int toSwitch, int value)
+        {
+            foreach (var row in Rows)
+                if (row.Blocked == toSwitch)
+                    row.Blocked = value;
+        }
+
+        public void SwitchColumnBlocked(int toSwitch, int value)
+        {
+            foreach (var column in Columns)
+                if (column.Blocked == toSwitch)
+                    column.Blocked = value;
+        }
+
+        public int ActualToLocalColumn(int index)
+        {
+            foreach (var column in Columns)
+                if (column.ActualNumber == index)
+                    return column.Number;
+
+            throw new Exception("Not found");
+        }
+
+        public int ActualToLocalRow(int index)
+        {
+            foreach (var row in Rows)
+                if (row.ActualNumber == index)
+                    return row.Number;
+
+            throw new Exception("Not found");
         }
 
         private void RememberRemovedRow(Row row)

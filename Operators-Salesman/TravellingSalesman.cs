@@ -27,7 +27,7 @@
             {
                 var bound = LowerBound;
                 var (node1, node2) = Distance.FindNextEdge(ref bound);
-                (node1, node2) = CalculateOffset(node1, node2);
+                //(node1, node2) = CalculateOffset(node1, node2);
                 edges[node1] = node2;
                 LowerBound = bound;
                 Distance.SetInfinities(edges);
