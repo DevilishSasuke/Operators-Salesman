@@ -16,6 +16,13 @@
 
             var salesman = new TravellingSalesman(matrix);
             salesman.FindPath();
+
+            var path = salesman.Path;
+            for (int i = 0; i < path.Count; i++)
+                if (i == path.Count - 1)
+                    Console.Write($"{path[i] + 1} ");
+                else Console.Write($"{path[i] + 1} -> ");
+            Console.WriteLine($"= {salesman.PathDistance}");
         }
     }
 }

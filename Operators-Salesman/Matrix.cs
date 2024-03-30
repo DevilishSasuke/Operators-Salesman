@@ -251,6 +251,7 @@ namespace Operators
                     if (row.ActualNumber == rowIndex)
                     {
                         toSwitch = ActualToLocalColumn(columnIndex);
+                        if (toSwitch < 0) continue;
                         SwitchRowBlocked(toSwitch, row.Blocked);
                         row.Blocked = toSwitch;
                     }
@@ -258,6 +259,7 @@ namespace Operators
                     if (column.ActualNumber == columnIndex)
                     {
                         toSwitch = ActualToLocalRow(rowIndex);
+                        if(toSwitch < 0) continue;
                         SwitchColumnBlocked(toSwitch, column.Blocked);
                         column.Blocked = toSwitch;
                     }
@@ -284,7 +286,7 @@ namespace Operators
                 if (column.ActualNumber == index)
                     return column.Number;
 
-            throw new Exception("Not found");
+            return -1;
         }
 
         public int ActualToLocalRow(int index)
@@ -293,7 +295,7 @@ namespace Operators
                 if (row.ActualNumber == index)
                     return row.Number;
 
-            throw new Exception("Not found");
+            return -1;
         }
 
         private void RememberRemovedRow(Row row)
