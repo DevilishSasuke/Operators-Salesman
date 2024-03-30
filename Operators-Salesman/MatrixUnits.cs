@@ -2,24 +2,24 @@
 {
     public abstract class MatrixUnit
     {
-        public int Number { get; set; }
-        public int ActualNumber { get; set; }
-        public bool IsActive { get; private set; }
-        public int Blocked { get; set; }
-        public List<List<decimal>> Distance;
-        public Matrix Owner { get; set; }
+        public int Number { get; set; }             // Индекс
+        public int ActualNumber { get; set; }       // Начальный номер
+        public int Infinity { get; set; }           // Индекс элемента-бесконечности
+        public bool IsActive { get; private set; }  // Активен ли элемент
+        public Matrix Owner { get; set; }           // Матрица-владелец
+        public List<List<decimal>> Distance;        // Список расстояний
 
         public MatrixUnit(int number, List<List<decimal>> distance, Matrix owner)
         {
             Distance = distance;
             Number = number;
             ActualNumber = number;
-            Blocked = Number;
+            Infinity = Number;
             IsActive = true;
             Owner = owner;
         }
 
-        public decimal Min() => Min(Blocked);
+        public decimal Min() => Min(Infinity);
         public decimal Min(int index)
         {
             if (!IsActive) throw new Exception("Inactive");
@@ -29,29 +29,26 @@
 
             for (int i = 0; i < values.Count; i++)
             {
-                if (i == Blocked || i == index) continue;
+                if (i == Infinity || i == index) continue;
                 if (values[i] < min) min = values[i];
             }
 
             return min;
         }
         public abstract List<decimal> Values();
-
+        
         public static implicit operator List<decimal>(MatrixUnit unit) => unit.Values();
-        public static implicit operator bool(MatrixUnit unit) => unit.IsActive;
-        public static implicit operator int(MatrixUnit unit) => unit.Blocked;
         public void SetActive() => IsActive = true;
         public void SetInactive() => IsActive = false;
-        public void Add(decimal value) { Values().Add(value); }
         public abstract decimal this[int index] { get; set; }
     }
 
     public class Column : MatrixUnit
     {
-        public Column(int number, List<List<decimal>> distance, Matrix owner) : base(number, distance, owner)
-        {
-        }
+        public Column(int number, List<List<decimal>> distance, Matrix owner) : base(number, distance, owner) { }
 
+        // Получение значений сущности
+        // Только для чтения
         public override List<decimal> Values()
         {
             var values = new List<decimal>();
@@ -61,7 +58,7 @@
                     if (row.IsActive) values.Add(Distance[row.Number][Number]);
                 return values;
             }
-            throw new Exception("Inactive");
+            throw new Exception("Inactive column");
         }
 
         public override decimal this[int index]
@@ -73,10 +70,10 @@
 
     public class Row : MatrixUnit
     {
-        public Row(int number, List<List<decimal>> distance, Matrix owner) : base(number, distance, owner)
-        {
-        }
+        public Row(int number, List<List<decimal>> distance, Matrix owner) : base(number, distance, owner) { }
 
+        // Получение значений сущности
+        // Только для чтения
         public override List<decimal> Values()
         {
             var values = new List<decimal>();
@@ -86,10 +83,9 @@
                     if (column.IsActive) values.Add(Distance[Number][column.Number]);
                 return values;
             }
-            throw new Exception("Inactive");
+            throw new Exception("Inactive row");
         }
 
-        
         public override decimal this[int index]
         {
             get => Distance[Number][index];

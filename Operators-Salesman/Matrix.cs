@@ -1,24 +1,21 @@
-﻿using System.Runtime.InteropServices;
-
-namespace Operators
+﻿namespace Operators
 {
     public class Matrix
     {
-        public List<Column> Columns { get; set; }
         public List<Row> Rows { get; set; }
+        public List<Column> Columns { get; set; }
         public List<List<decimal>> Distance { get; private set; }
-        private Dictionary<int, int> edges;
-        private List<Row> RemovedRows = new();
-        private List<Column> RemovedColumns = new();
 
+        // Создание матрицы
         public Matrix(List<List<decimal>> distance)
         {
             Rows = new List<Row>();
             Columns = new List<Column>();
-            edges = new();
             Distance = new();
+
             foreach (var row in distance)
                 Distance.Add(new(row));
+
             for (int i = 0; i < Distance.Count; i++)
             {
                 Rows.Add(new Row(i, Distance, this));
@@ -26,24 +23,18 @@ namespace Operators
             }
         }
 
-        public decimal LowerBoundValue()
-        {
-            var rowElements = MinRowElements();
-            SubInRows(rowElements);
-            var columnElements = MinColumnElements();
-            SubInColumns(columnElements);
-
-            return rowElements.Sum() + columnElements.Sum();
-        }
-
+        // Нахождение следующего пункта пути
         public (int, int) FindNextEdge(ref decimal bound)
         {
-            var rowElements = MinRowWithZeroReplacing();
-            var columnElements = MinColumnWithZeroReplacing();
+            // Находим минимальные элементы с поочередной заменой нулей
+            var rowConsts = MinRowWithZeroReplacing();
+            var columnConsts = MinColumnWithZeroReplacing();
 
-            var (indexI, indexJ) = MaxIntersection(rowElements, columnElements);
-            var excluded = ExcludeEdge(indexI, indexJ);
-            var included = IncludeEdge(indexI, indexJ);
+            // Находим максимальную сумму
+            var (indexI, indexJ) = MaxIntersection(rowConsts, columnConsts);
+            var excluded = ExcludeEdge(indexI, indexJ); // Сдвиг при исключении ребра
+            var included = IncludeEdge(indexI, indexJ); // Сдвиг при включении ребра
+
             if (included <= excluded)
             {
                 bound += included;
@@ -52,112 +43,110 @@ namespace Operators
                 CreateNewMatrix();
                 return (indexI, indexJ);
             }
-            else
-            {
-                bound += excluded;
-                RollBack(indexI, indexJ);
-                throw new Exception("Incorrect result");
-            }
+
+            bound += excluded;
+            RollBack(indexI, indexJ);
+            throw new Exception("Incorrect result");
         }
 
-        public (int, int) MaxIntersection(List<decimal> rows, List<decimal> columns)
+        // Исключение ребра
+        public decimal ExcludeEdge(int i, int j)
         {
-            decimal maxValue = decimal.MinValue, value;
+            // Пересчёт констант со смещением бесконечностей
+            var rowConsts = MinRowElements();
+            rowConsts[i] = Rows[i].Min(j);
+            var columnConsts = MinColumnElements();
+            columnConsts[j] = Columns[j].Min(i);
+
+            return rowConsts.Sum() + columnConsts.Sum();
+        }
+
+        // Включение ребра
+        public decimal IncludeEdge(int i, int j)
+        {
+            SetInactive(Rows[i]);
+            SetInactive(Columns[j]);
+
+            var rowConsts = MinRowElements();
+            var columnConsts = MinColumnElements();
+
+            return rowConsts.Sum() + columnConsts.Sum();
+        }
+
+        // Расстановка элементов-бесконечностей в матрице
+        public void SetInfinities(Dictionary<int, int> edges)
+        {
+            List<(int, int)> infinities;
+            if (edges.Count < 2) return;
+
+            infinities = FindRestrictions(edges);
+
+            foreach(var infinity in infinities)
+                SetRestriction(infinity);
+        }
+
+        // Постановка бесконечности в верное расположение в новой матрице
+        public void SetRestriction((int, int) infinity)
+        {
+            var rowIndex = infinity.Item1;
+            var columnIndex = infinity.Item2;
+            int toSwitch;
+            // Выставляем элемент-бесконечноcть относительно новой матрицы
+            foreach (var row in Rows)
+                if (row.ActualNumber == rowIndex)
+                {
+                    toSwitch = ActualToLocalColumn(columnIndex);
+                    if (toSwitch < 0) continue;
+                    SwitchRowInfinity(toSwitch, row.Infinity);
+                    row.Infinity = toSwitch;
+                }
+            foreach (var column in Columns)
+                if (column.ActualNumber == columnIndex)
+                {
+                    toSwitch = ActualToLocalRow(rowIndex);
+                    if (toSwitch < 0) continue;
+                    SwitchColumnInfinity(toSwitch, column.Infinity);
+                    column.Infinity = toSwitch;
+                }
+        }
+
+        // Наибольшая сумма констант
+        public (int, int) MaxIntersection(List<decimal> rowsConsts, List<decimal> columnsConsts)
+        {
+            decimal value, maxValue = decimal.MinValue;
             int resI = 0, resJ = 0;
 
-            for (int i = 0; i < Distance.Count; i++)
-            {
-                if (!Rows[i].IsActive) continue;
-                for (int j = 0; j < Distance[0].Count; j++)
-                {
-                    if (!Columns[j].IsActive) continue;
-                    if (Distance[i][j] == 0 && j != Rows[i].Blocked && i != Columns[j].Blocked)
+            foreach (var row in Rows.Where(x => x.IsActive))
+                foreach (var column in Columns.Where(x => x.IsActive))
+                    if (Distance[row.Number][column.Number] == 0
+                        && row.Number != column.Infinity
+                        && column.Number != row.Infinity)
                     {
-                        value = rows[i] + columns[j];
+                        value = rowsConsts[row.Number] + columnsConsts[column.Number];
                         if (value > maxValue)
                         {
                             maxValue = value;
-                            (resI, resJ) = (i, j);
+                            (resI, resJ) = (row.Number, column.Number);
                         }
                     }
 
-                }
-            }
-
             return (resI, resJ);
-        } 
-
-        public void CreateNewMatrix()
-        {
-            var newDistance = new List<List<decimal>>();
-            List<int> rowActualNumbers = new(), columnActualNumbers = new();
-
-            foreach (var column in Columns)
-                if (column.IsActive)
-                    columnActualNumbers.Add(column.ActualNumber);
-
-            foreach (var row in Rows)
-                if (row.IsActive)
-                {
-                    newDistance.Add(row.Values());
-                    rowActualNumbers.Add(row.ActualNumber);
-                }
-
-            var matrix = new Matrix(newDistance);
-            this.Distance = matrix.Distance;
-            this.Rows = matrix.Rows;
-            this.Columns = matrix.Columns;
-
-            for (int i = 0; i < Distance.Count; i++)
-            {
-                Rows[i].ActualNumber = rowActualNumbers[i];
-                Columns[i].ActualNumber = columnActualNumbers[i];
-            }
         }
 
-        public decimal ExcludeEdge(int indexI, int indexJ)
+        // Получить ограничения для исключения подциклов
+        public List<(int, int)> FindRestrictions(Dictionary<int, int> edges)
         {
-            var rowElements = MinRowElements();
-            rowElements[indexI] = Rows[indexI].Min(indexJ);
-            var columnElements = MinColumnElements();
-            columnElements[indexJ] = Columns[indexJ].Min(indexI);
+            var infinities = new List<(int, int)>();
 
-            return rowElements.Sum() + columnElements.Sum();
+            foreach (var path in edges)
+                foreach (var otherPath in edges)
+                    if (path.Value == otherPath.Key)
+                        infinities.Add((otherPath.Value, path.Key));
+
+            return infinities;
         }
 
-        public decimal IncludeEdge(int i, int j)
-        {
-            SetInactiveRow(i);
-            SetInactiveColumn(j);
-
-            var rowElements = MinRowElements();
-            var columnElements = MinColumnElements();
-
-            return rowElements.Sum() + columnElements.Sum();
-        }
-
-        public void SubInRows(List<decimal> values)
-        {
-            for (int i = 0; i < Rows.Count; i++)
-            {
-                for (int j = 0; j < Columns.Count; j++)
-                {
-                    if (j == Rows[i].Number) continue;
-                    Rows[i][j] -= values[i];
-                }
-            }
-        }
-        
-        public void SubInColumns(List<decimal> values)
-        {
-            for (int i = 0; i < Columns.Count; i++)
-                for (int j = 0; j < Rows.Count; j++)
-                {
-                    if (j == Columns[i].Number) continue;
-                    Columns[i][j] -= values[i];
-                }
-        }
-
+        // Минимальные элементы каждого из рядов
         public List<decimal> MinRowElements()
         {
             var elements = new List<decimal>();
@@ -172,21 +161,17 @@ namespace Operators
         {
             var elements = new List<decimal>();
 
-            foreach (var row in Rows)
+            foreach(var row in Rows.Where(x => x.IsActive))
             {
-                if (!row.IsActive) continue;
                 decimal min = decimal.MaxValue;
-                for (int j = 0; j < row.Values().Count; j++) 
-                {
-                    if (!Columns[j].IsActive) continue;
-                    if (row[j] == 0)
+                foreach(var column in Columns.Where(x => x.IsActive))
+                    if (row[column.Number] == 0)
                     {
-                        if (j == row.Blocked) continue;
-                        var value = row.Min(j);
+                        if (column.Number == row.Infinity) continue;
+                        var value = row.Min(column.Number);
                         if (value < min)
                             min = value;
                     }
-                }
                 if (min == decimal.MaxValue)
                     min = row.Min();
                 elements.Add(min);
@@ -195,10 +180,11 @@ namespace Operators
             return elements;
         }
 
+        // Минимальные элементы каждого из столбцов
         public List<decimal> MinColumnElements()
         {
             var elements = new List<decimal>();
-            foreach(var column in Columns)
+            foreach (var column in Columns)
                 if (column.IsActive) elements.Add(column.Min());
 
             return elements;
@@ -209,21 +195,17 @@ namespace Operators
         {
             var elements = new List<decimal>();
 
-            foreach (var column in Columns)
+            foreach(var column in Columns.Where(x => x.IsActive))
             {
-                if (!column.IsActive) continue;
                 decimal min = decimal.MaxValue;
-                for (int j = 0; j < column.Values().Count; j++) 
-                {
-                    if (!Rows[j].IsActive) continue;
-                    if (column[j] == 0)
+                foreach(var row in Rows.Where(x => x.IsActive))
+                    if (column[row.Number] == 0)
                     {
-                        if (j == column.Blocked) continue;
-                        var value = column.Min(j);
+                        if (row.Number == column.Infinity) continue;
+                        var value = column.Min(row.Number);
                         if (value < min)
                             min = value;
                     }
-                }
                 if (min == decimal.MaxValue)
                     min = column.Min();
                 elements.Add(min);
@@ -232,130 +214,101 @@ namespace Operators
             return elements;
         }
 
-        public void SetInfinities(Dictionary<int, int> edges)
+        // Создание новой матрицы для упрощения навигации
+        public void CreateNewMatrix()
         {
-            List<(int, int)> blocks = new List<(int, int)>();
-            if (edges.Count < 2) return;
+            // Новые значения для матрицы
+            var newDistance = Rows
+                .Where(x => x.IsActive)
+                .Select(x => x.Values()).ToList();
+            // Изначальные номера рядов и столбцов
+            var rowActualNumbers = Rows
+                .Where(x => x.IsActive)
+                .Select(x => x.ActualNumber).ToList();
+            var columnActualNumbers = Columns
+                .Where(x => x.IsActive)
+                .Select(x => x.ActualNumber).ToList();
 
-            foreach(var items in edges)
-                foreach(var otherItems in edges)
-                    if (items.Value == otherItems.Key)
-                        blocks.Add((otherItems.Value, items.Key));
+            var matrix = new Matrix(newDistance);
+            this.Distance = matrix.Distance;
+            this.Rows = matrix.Rows;
+            this.Columns = matrix.Columns;
 
-            foreach(var block in blocks)
+            for (int i = 0; i < Distance.Count; i++)
             {
-                var rowIndex = block.Item1;
-                var columnIndex = block.Item2;
-                int toSwitch;
-                foreach (var row in Rows)
-                    if (row.ActualNumber == rowIndex)
-                    {
-                        toSwitch = ActualToLocalColumn(columnIndex);
-                        if (toSwitch < 0) continue;
-                        SwitchRowBlocked(toSwitch, row.Blocked);
-                        row.Blocked = toSwitch;
-                    }
-                foreach (var column in Columns)
-                    if (column.ActualNumber == columnIndex)
-                    {
-                        toSwitch = ActualToLocalRow(rowIndex);
-                        if(toSwitch < 0) continue;
-                        SwitchColumnBlocked(toSwitch, column.Blocked);
-                        column.Blocked = toSwitch;
-                    }
+                Rows[i].ActualNumber = rowActualNumbers[i];
+                Columns[i].ActualNumber = columnActualNumbers[i];
             }
         }
 
-        public void SwitchRowBlocked(int toSwitch, int value)
+        // Нижнее значение границы
+        public decimal LowerBoundValue()
+        {
+            var rowElements = MinRowElements();
+            SubInRows(rowElements);
+            var columnElements = MinColumnElements();
+            SubInColumns(columnElements);
+
+            return rowElements.Sum() + columnElements.Sum();
+        }
+
+        public void SwitchRowInfinity(int toSwitch, int value)
         {
             foreach (var row in Rows)
-                if (row.Blocked == toSwitch)
-                    row.Blocked = value;
+                if (row.Infinity == toSwitch)
+                    row.Infinity = value;
         }
 
-        public void SwitchColumnBlocked(int toSwitch, int value)
+        public void SwitchColumnInfinity(int toSwitch, int value)
         {
             foreach (var column in Columns)
-                if (column.Blocked == toSwitch)
-                    column.Blocked = value;
+                if (column.Infinity == toSwitch)
+                    column.Infinity = value;
         }
 
-        public int ActualToLocalColumn(int index)
+        public void SubInRows(List<decimal> values)
         {
-            foreach (var column in Columns)
-                if (column.ActualNumber == index)
-                    return column.Number;
-
-            return -1;
+            for (int i = 0; i < Rows.Count; i++)
+                for (int j = 0; j < Columns.Count; j++)
+                {
+                    if (j == Rows[i].Infinity) continue;
+                    Rows[i][j] -= values[i];
+                }
         }
 
+        public void SubInColumns(List<decimal> values)
+        {
+            for (int j = 0; j < Columns.Count; j++)
+                for (int i = 0; i < Rows.Count; i++)
+                {
+                    if (i == Columns[j].Infinity) continue;
+                    Columns[j][i] -= values[j];
+                }
+        }
+
+        // Нахождение индекса ряда по его настоящему номеру
         public int ActualToLocalRow(int index)
         {
-            foreach (var row in Rows)
-                if (row.ActualNumber == index)
-                    return row.Number;
-
-            return -1;
+            var number = Rows
+                .Where(x => x.ActualNumber == index)
+                .Select(x => x.Number);
+            return number.Count() == 0 ? -1 : number.First();
         }
 
-        private void RememberRemovedRow(Row row)
+        // Нахождение индекса столбца по его настоящему номеру
+        public int ActualToLocalColumn(int index)
         {
-            int offset = 0;
-            for (int i = RemovedRows.Count - 1; i >= 0; i--)
-                if (row.Number + offset >= RemovedRows[i].Number)
-                    offset++;
-            row.Number += offset;
-            RemovedRows.Add(row);
-        }
-        private void RememberRemovedColumn(Column column)
-        {
-            int offset = 0;
-            for (int i = RemovedColumns.Count - 1; i >= 0; i--)
-                if (column.Number + offset >= RemovedColumns[i].Number)
-                    offset++;
-            column.Number += offset;
-            RemovedColumns.Add(column);
+            var number = Columns
+                .Where(x => x.ActualNumber == index)
+                .Select(x => x.Number);
+            return number.Count() == 0 ? -1 : number.First();
         }
 
-        private void RollBack(int i, int j)
-        {
-            SetActiveRow(i);
-            SetActiveColumn(j);
-        }
-
-        private void SetActiveRow(int index) => Rows[index].SetActive();
-        public void SetInactiveRow(int index) => Rows[index].SetInactive();
-        private void SetActiveColumn(int index) => Columns[index].SetActive();
-        public void SetInactiveColumn(int index) => Columns[index].SetInactive();
-        public List<decimal> GetColumn(int columnNumber) => Columns[columnNumber];
-        public List<decimal> GetRow(int rowNumber) => Rows[rowNumber];
-        public decimal this[int i, int j]
-        {
-            get
-            {
-                if (Rows[i].IsActive || Columns[j].IsActive)
-                    throw new Exception("Is empty");
-                else return Rows[i][j];
-            }
-            set => Rows[i][j] = value;
-        }
-
-        public int RowsCount()
-        {
-            int count = 0;
-            foreach (var row in Rows)
-                if (row.IsActive) count++;
-
-            return count;
-        }
-
-        public int ColumnsCount() 
-        {
-            int count = 0;
-            foreach(var column in Columns)
-                if (column.IsActive) count++;
-
-            return count;
-        }
+        // Смена активных рядов и столбцов
+        private void SetActive(MatrixUnit unit) => unit.SetActive();
+        private void SetInactive(MatrixUnit unit) => unit.SetInactive();
+        public int RowsCount() => Rows.Where(x => x.IsActive).Count();
+        public int ColumnsCount() => Columns.Where(x => x.IsActive).Count();
+        private void RollBack(int i, int j) { SetActive(Rows[i]); SetActive(Columns[j]); }
     }
 }

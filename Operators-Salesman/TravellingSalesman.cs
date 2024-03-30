@@ -1,14 +1,12 @@
-﻿using System.Runtime.CompilerServices;
-
-namespace Operators
+﻿namespace Operators
 {
     public class TravellingSalesman
     {
-        public Matrix Distance{ get; private set; }
-        public List<int> Path { get; private set; }
-        public decimal PathDistance => LowerBound;
-        private decimal LowerBound { get; set; }
-        private Dictionary<int, int> edges { get; set; }
+        public List<int> Path { get; private set; }         // Путь
+        public decimal PathDistance { get; private set; }   // Длина пути
+        public Matrix Distance{ get; private set; }         // Матрица для вычислений
+        private Dictionary<int, int> Edges { get; set; }    // Прошедшие рёбра
+
         public TravellingSalesman(List<List<decimal>> paths)
         {
             int len = paths.Count;
@@ -17,29 +15,40 @@ namespace Operators
                     throw new Exception("Matrix is not square");
 
             Distance = new Matrix(paths);
+            Edges = new();
+            Path = new();
         }
 
         public void FindPath()
         {
-            Path = new();
-            edges = new();
-
-            LowerBound = Distance.LowerBoundValue();
+            // Берём начальное значение нижней границы
+            var bound = Distance.LowerBoundValue(); 
+            // Пока матрица не достигнет размера 2x2
             while(Distance.RowsCount() > 2 && Distance.ColumnsCount() > 2)
             {
-                var bound = LowerBound;
-                var (node1, node2) = Distance.FindNextEdge(ref bound);
-                edges[node1] = node2;
-                LowerBound = bound;
-                Distance.SetInfinities(edges);
+                // Расставляем элементы-бесконечности
+                Distance.SetInfinities(Edges);
+                // Находим следующий путь
+                var (point1, point2) = Distance.FindNextEdge(ref bound);
+                Edges[point1] = point2;
             }
 
-            for (int i = 0; i < Distance.RowsCount(); i++)
-                edges[Distance.Rows[i].ActualNumber] = Distance.Columns[1 - i].ActualNumber;
+            // Добавляем оставшиеся элементы
+            foreach(var row in Distance.Rows)
+                Edges[row.ActualNumber] = Distance.Columns[1 - row.Infinity].ActualNumber;
 
-            Path.Add(edges.First().Key);
-            for(int i = 0; i < edges.Count; i++)
-                Path.Add(edges[Path.Last()]);
+            SetNewPath();           // Собираем прошедший путь
+            PathDistance = bound;   // Выставляем длину пути
+        }
+
+        // Сбор пройденного пути
+        private void SetNewPath()
+        {
+            if (Edges.Count == 0) return;
+
+            Path.Add(Edges.First().Key);
+            for (int i = 0; i < Edges.Count; i++)
+                Path.Add(Edges[Path.Last()]);
         }
     }
 }
